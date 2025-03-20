@@ -16,7 +16,7 @@ tokenizer.fit_on_texts([text])
 sequences = tokenizer.texts_to_sequences([text])[0]
 
 # Create input-output pairs
-sequence_length = 40
+sequence_length = 20
 X, y = [], []
 
 for i in range(sequence_length, len(sequences)):
@@ -41,9 +41,8 @@ vocab_size = len(tokenizer.word_index) + 1
 
 model = Sequential([
     Embedding(vocab_size, 50, input_length=sequence_length),
-    LSTM(256, return_sequences=True),
-    LSTM(256),
-    Dense(256, activation='relu'),
+    LSTM(128),  # Reduced LSTM units
+    Dense(128, activation='relu'),
     Dense(vocab_size, activation='softmax')
 ])
 
@@ -70,32 +69,42 @@ history = model.fit(
 print("Model training completed successfully.")
 
 # text generation
-import random
+
 
 # Text generation function
-def generate_text(seed_text, next_chars=500):
-    for _ in range(next_chars):
+import numpy as np
+
+# Batch generation function
+def generate_text_batch(seed_text, next_chars=1000, batch_size=50):
+    generated = seed_text
+    for _ in range(next_chars // batch_size):
         token_list = tokenizer.texts_to_sequences([seed_text])[0]
-        
-        # Pad sequence
-        token_list = np.pad(token_list, (sequence_length - len(token_list), 0), mode='constant')
+
+        if len(token_list) < sequence_length:
+            token_list = np.pad(token_list, (sequence_length - len(token_list), 0), mode='constant')
+        else:
+            token_list = token_list[-sequence_length:]
+
         token_list = np.expand_dims(token_list, axis=0)
 
-        # Predict next token
-        predicted = model.predict(token_list, verbose=0)[0]
-        next_token = np.random.choice(len(predicted), p=predicted)
-        
-        # Convert token to character
-        for char, index in tokenizer.word_index.items():
-            if index == next_token:
-                seed_text += char
-                break
-    
-    return seed_text
+        # Predict batch of tokens
+        predictions = model.predict(token_list, verbose=0)
 
-# Generate text
+        # Select top predictions
+        for _ in range(batch_size):
+            predicted = predictions[0]
+            next_token = np.random.choice(len(predicted), p=predicted)
+            
+            for char, index in tokenizer.word_index.items():
+                if index == next_token:
+                    generated += char
+                    seed_text += char
+                    break
+
+    return generated
+
+# Generate batch text
 seed = "shall i compare thee to a summer's day"
-generated_text = generate_text(seed, next_chars=1000)
-
+generated_text = generate_text_batch(seed, next_chars=1000, batch_size=100)
 print("Generated Text:")
 print(generated_text)
